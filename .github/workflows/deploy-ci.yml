@@ -36,10 +36,16 @@ jobs:
       # -----------------
       # Step 3: Build and push Vote app image
       # -----------------
-      - name: Build & Push Vote Image
+            # -----------------
+      # Step 3: Deploy YAML files to cluster
+      # -----------------
+      - name: Deploy to Kubernetes
         run: |
-          docker build -t $REGISTRY/${IMAGE_OWNER}/vote:latest -f Dockerfile.vote .
-          docker push $REGISTRY/${IMAGE_OWNER}/vote:latest
+          kubectl apply -f db.yaml
+          kubectl apply -f redis.yaml
+          kubectl apply -f vote.yaml
+          kubectl apply -f result.yaml
+          kubectl apply -f worker.yaml
 
       # -----------------
       # Step 4: Build and push Result app image
