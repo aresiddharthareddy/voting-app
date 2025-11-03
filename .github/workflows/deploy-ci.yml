@@ -1,4 +1,4 @@
-name: Voting App CI - Level 1
+name: Voting App CI/CD - Level 2
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  validate:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,5 +21,22 @@ jobs:
             yamllint "$file"
           done
 
-      - name: All files validated
-        run: echo "✅ All YAML files are valid!"
+      - name: Setup Kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure Kubernetes credentials
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Deploy to Kubernetes
+        run: |
+          echo "Applying manifests..."
+          kubectl apply -f db.yaml
+          kubectl apply -f redis.yaml
+          kubectl apply -f vote.yaml
+          kubectl apply -f result.yaml
+          kubectl apply -f worker.yaml
+          echo "✅ Deployment successful!"
