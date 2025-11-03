@@ -1,0 +1,57 @@
+name: OWASP Dependency Check Scan
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  odc-scan:
+    name: OWASP Dependency Check Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Java (required for ODC)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Step 3: Download and extract OWASP Dependency Check
+      - name: Install OWASP Dependency Check
+        run: |
+          curl -L https://github.com/jeremylong/DependencyCheck/releases/latest/download/dependency-check.zip -o dc.zip
+          unzip -q dc.zip -d $HOME/dependency-check
+          export PATH=$HOME/dependency-check/bin:$PATH
+          dependency-check.sh --version
+
+      # Step 4: Run Dependency Check and generate HTML report
+      - name: Run Dependency Check
+        run: |
+          mkdir -p reports
+          $HOME/dependency-check/bin/dependency-check.sh \
+            --scan . \
+            --format HTML \
+            --out reports/dependency-check-report.html \
+            --disableAssembly
+
+      # Step 5: Upload report artifact (for download)
+      - name: Upload ODC HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ODC-HTML-Report
+          path: reports/dependency-check-report.html
+
+      # Step 6: Deploy report to GitHub Pages
+      - name: Deploy Report to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: reports
+          force_orphan: true
