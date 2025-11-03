@@ -22,13 +22,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # Step 3: Download and extract OWASP Dependency Check
+      # Step 3: Download OWASP Dependency Check (fixed version)
       - name: Install OWASP Dependency Check
         run: |
-          curl -L https://github.com/jeremylong/DependencyCheck/releases/latest/download/dependency-check.zip -o dc.zip
+          curl -L https://github.com/jeremylong/DependencyCheck/releases/download/v9.2.0/dependency-check-9.2.0-release.zip -o dc.zip
           unzip -q dc.zip -d $HOME/dependency-check
           export PATH=$HOME/dependency-check/bin:$PATH
-          dependency-check.sh --version
+          $HOME/dependency-check/bin/dependency-check.sh --version
 
       # Step 4: Run Dependency Check and generate HTML report
       - name: Run Dependency Check
@@ -40,14 +40,14 @@ jobs:
             --out reports/dependency-check-report.html \
             --disableAssembly
 
-      # Step 5: Upload report artifact (for download)
+      # Step 5: Upload report as artifact
       - name: Upload ODC HTML Report
         uses: actions/upload-artifact@v4
         with:
           name: ODC-HTML-Report
           path: reports/dependency-check-report.html
 
-      # Step 6: Deploy report to GitHub Pages
+      # Step 6: Deploy to GitHub Pages
       - name: Deploy Report to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
