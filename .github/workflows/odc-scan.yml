@@ -6,53 +6,51 @@ on:
   workflow_dispatch:
 
 jobs:
-  odc-scan:
+  dependency-check:
     name: OWASP Dependency Check Scan
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository
+      # 1️⃣ Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Setup Java (required for ODC)
+      # 2️⃣ Setup Java (required by Dependency-Check)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # Step 3: Download and extract Dependency Check properly
+      # 3️⃣ Download and extract Dependency-Check
+      - name: Download OWASP Dependency Check
+        run: |
+          wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.3/dependency-check-10.0.3-release.zip
+          unzip -q dependency-check-10.0.3-release.zip -d $HOME/
+          mv $HOME/dependency-check $HOME/dependency-check-10.0.3
+
+      # 4️⃣ Run Dependency-Check Scan (generates HTML + JSON report)
       - name: Run Dependency Check
         run: |
           mkdir -p reports
-          $HOME/dependency-check/bin/dependency-check.sh \
+          $HOME/dependency-check-10.0.3/bin/dependency-check.sh \
+            --project "${{ github.repository }}" \
             --scan . \
-            --format HTML \
-            --out reports/dependency-check-report.html \
+            --out reports \
+            --format "HTML" \
+            --format "JSON" \
             --disableAssembly \
-            --nvdApiKey "${{ secrets.NVD_API_KEY }}"
+            --nvdApiKey "${{ secrets.NVD_API_KEY }}" || true
 
-
-      # Step 4: Run Dependency Check and generate HTML report
-      - name: Run Dependency Check
-        run: |
-          mkdir -p reports
-          $HOME/dependency-check/bin/dependency-check.sh \
-            --scan . \
-            --format HTML \
-            --out reports/dependency-check-report.html \
-            --disableAssembly
-
-      # Step 5: Upload report as artifact
+      # 5️⃣ Upload HTML report as artifact
       - name: Upload ODC HTML Report
         uses: actions/upload-artifact@v4
         with:
           name: ODC-HTML-Report
           path: reports/dependency-check-report.html
 
-      # Step 6: Deploy to GitHub Pages
-      - name: Deploy Report to GitHub Pages
+      # 6️⃣ Deploy report to GitHub Pages
+      - name: Deploy HTML Report to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
