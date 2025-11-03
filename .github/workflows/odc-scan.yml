@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
-      - name: Checkout Repository
+      # Step 1: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       # Step 2: Setup Java (required for ODC)
@@ -22,12 +22,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # Step 3: Download OWASP Dependency Check (fixed version)
+      # Step 3: Download and extract Dependency Check properly
       - name: Install OWASP Dependency Check
         run: |
           curl -L https://github.com/jeremylong/DependencyCheck/releases/download/v9.2.0/dependency-check-9.2.0-release.zip -o dc.zip
-          unzip -q dc.zip -d $HOME/dependency-check
+          unzip -q dc.zip -d $HOME/
           export PATH=$HOME/dependency-check/bin:$PATH
+          ls -R $HOME/dependency-check
           $HOME/dependency-check/bin/dependency-check.sh --version
 
       # Step 4: Run Dependency Check and generate HTML report
