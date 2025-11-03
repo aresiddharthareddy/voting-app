@@ -1,42 +1,68 @@
-name: Voting App CI/CD - Level 2
+name: Level 3 - CI & Deploy Voting App
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_OWNER: ${{ github.repository_owner }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Validate YAML files
-        run: |
-          echo "Validating YAML files..."
-          for file in *.yaml; do
-            echo "Checking $file"
-            yamllint "$file"
-          done
-
-      - name: Setup Kubectl
-        uses: azure/setup-kubectl@v3
+      # -----------------
+      # Step 1: Validate YAML files
+      # -----------------
+      - name: Validate Kubernetes YAML files
+        uses: ibiqlik/action-yamllint@v3
         with:
-          version: 'v1.28.0'
+          file_or_dir: "."
+          config_file: ".yamllint.yaml"
 
-      - name: Configure Kubernetes credentials
-        run: |
-          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
-          export KUBECONFIG=kubeconfig
+      # -----------------
+      # Step 2: Log in to GitHub Container Registry
+      # -----------------
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Deploy to Kubernetes
+      # -----------------
+      # Step 3: Build and push Vote app image
+      # -----------------
+      - name: Build & Push Vote Image
         run: |
-          echo "Applying manifests..."
+          docker build -t $REGISTRY/${IMAGE_OWNER}/vote:latest -f Dockerfile.vote .
+          docker push $REGISTRY/${IMAGE_OWNER}/vote:latest
+
+      # -----------------
+      # Step 4: Build and push Result app image
+      # -----------------
+      - name: Build & Push Result Image
+        run: |
+          docker build -t $REGISTRY/${IMAGE_OWNER}/result:latest -f Dockerfile.result .
+          docker push $REGISTRY/${IMAGE_OWNER}/result:latest
+
+      # -----------------
+      # Step 5: Build and push Worker image
+      # -----------------
+      - name: Build & Push Worker Image
+        run: |
+          docker build -t $REGISTRY/${IMAGE_OWNER}/worker:latest -f Dockerfile.worker .
+          docker push $REGISTRY/${IMAGE_OWNER}/worker:latest
+
+      # -----------------
+      # Step 6: Deploy to Kubernetes
+      # -----------------
+      - name: Deploy Voting App to Kubernetes
+        run: |
           kubectl apply -f db.yaml
           kubectl apply -f redis.yaml
           kubectl apply -f vote.yaml
           kubectl apply -f result.yaml
           kubectl apply -f worker.yaml
-          echo "✅ Deployment successful!"
