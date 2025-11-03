@@ -30,7 +30,8 @@ jobs:
       # Step 2: Log in to GitHub Container Registry
       # -----------------
       - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-@Siddhu1511
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
 
       # -----------------
       # Step 3: Build and push Vote app image
