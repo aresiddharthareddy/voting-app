@@ -1,75 +1,39 @@
-name: Level 3 - CI & Deploy Voting App
+name: Simple Website CI/CD
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_OWNER: ${{ github.repository_owner }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # -----------------
-      # Step 1: Validate YAML files
-      # -----------------
-      - name: Validate Kubernetes YAML files
-        uses: ibiqlik/action-yamllint@v3
+      - name: Setup Node (for frontend) or Python (for backend)
+        uses: actions/setup-node@v4
         with:
-          file_or_dir: "."
-          config_file: ".yamllint.yaml"
+          node-version: '18'
 
-      # -----------------
-      # Step 2: Log in to GitHub Container Registry
-      # -----------------
-      - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-
-      # -----------------
-      # Step 3: Build and push Vote app image
-      # -----------------
-            # -----------------
-      # Step 3: Deploy YAML files to cluster
-      # -----------------
-      - name: Deploy to Kubernetes
+      - name: Install dependencies
         run: |
-          kubectl apply -f db.yaml
-          kubectl apply -f redis.yaml
-          kubectl apply -f vote.yaml
-          kubectl apply -f result.yaml
-          kubectl apply -f worker.yaml
+          if [ -f package.json ]; then
+            npm install
+          else
+            echo "No dependencies to install"
+          fi
 
-      # -----------------
-      # Step 4: Build and push Result app image
-      # -----------------
-      - name: Build & Push Result Image
+      - name: Build project (optional)
         run: |
-          docker build -t $REGISTRY/${IMAGE_OWNER}/result:latest -f Dockerfile.result .
-          docker push $REGISTRY/${IMAGE_OWNER}/result:latest
+          if [ -f package.json ]; then
+            npm run build || echo "No build script found"
+          fi
 
-      # -----------------
-      # Step 5: Build and push Worker image
-      # -----------------
-      - name: Build & Push Worker Image
-        run: |
-          docker build -t $REGISTRY/${IMAGE_OWNER}/worker:latest -f Dockerfile.worker .
-          docker push $REGISTRY/${IMAGE_OWNER}/worker:latest
-
-      # -----------------
-      # Step 6: Deploy to Kubernetes
-      # -----------------
-      - name: Deploy Voting App to Kubernetes
-        run: |
-          kubectl apply -f db.yaml
-          kubectl apply -f redis.yaml
-          kubectl apply -f vote.yaml
-          kubectl apply -f result.yaml
-          kubectl apply -f worker.yaml
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./  # Change this to your build folder if needed
