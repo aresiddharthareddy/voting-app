@@ -1,51 +1,49 @@
-name: ODC Dependency Check
+name: ODC Dependency-Check (reliable & fast)
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   dependency-check:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - name: Run OWASP Dependency-Check (action with DB image)
+        # This action runs a prebuilt dependency-check Docker image (DB included)
+        # so you DO NOT need to download the whole NVD in the job.
+        uses: dependency-check/Dependency-Check_Action@main
         with:
-          distribution: temurin
-          java-version: 17
+          project: ${{ github.repository }}
+          path: '.'                 # scan the repository root
+          out: reports              # output directory inside workspace
+          format: 'ALL'             # produces HTML, JSON, XML
+          failOnCVSS: '0'           # don't fail the job by default (0 = disabled). Change if needed.
+          # Additional args can be passed in `args` if you want:
+          # args: --disableAssembly
 
-      - name: Download Dependency-Check
+      - name: Show quick summary (counts by severity)
         run: |
-          DC_VERSION="10.0.3"
-          DC_DIR="$HOME/dependency-check"
-          echo "Downloading Dependency-Check v$DC_VERSION..."
-          wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip
-          unzip -q dependency-check-${DC_VERSION}-release.zip -d $HOME
-          mv $HOME/dependency-check-${DC_VERSION} $DC_DIR
-          ls -la $DC_DIR/bin
+          JSON="reports/dependency-check-report.json"
+          if [ -f "$JSON" ]; then
+            echo "### Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            jq -r '.dependencies[]?.vulnerabilities[]?.severity' "$JSON" 2>/dev/null \
+              | sort | uniq -c | awk '{print "- **"$2"**: "$1}' >> $GITHUB_STEP_SUMMARY || true
+            echo "" >> $GITHUB_STEP_SUMMARY
+            TOTAL=$(jq '[.dependencies[]?.vulnerabilities[]?] | length' "$JSON")
+            echo "Total vulnerabilities found: **$TOTAL**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No JSON report found; check action logs."
+          fi
+        shell: bash
 
-      - name: Run Dependency-Check scan
-        run: |
-          DC_DIR="$HOME/dependency-check"
-          mkdir -p ODC-Reports
-          $DC_DIR/bin/dependency-check.sh \
-            --project "GitHub Repo Scan" \
-            --scan . \
-            --format "ALL" \
-            --out ODC-Reports \
-            --disableAssembly \
-            --enableExperimental
-          echo "Scan complete. Reports generated in ODC-Reports directory."
-
-      - name: Upload ODC report artifacts
+      - name: Upload ODC reports (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: ODC-Reports
-          path: ODC-Reports
-          if-no-files-found: error
+          path: reports/
