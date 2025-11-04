@@ -1,92 +1,41 @@
 name: OWASP Dependency-Check (fast)
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:
   odc-fast-scan:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Java (required)
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Define variables
+      - name: Download Dependency-Check
         run: |
-          echo "DC_VERSION=10.0.3" >> $GITHUB_ENV
-          echo "DC_DIR=$HOME/dependency-check" >> $GITHUB_ENV
-          echo "DATA_MIRROR=https://jeremylong.github.io/DependencyCheckData" >> $GITHUB_ENV
-
-      - name: Restore cached Dependency-Check data (if any)
-        uses: actions/cache@v4
-        with:
-          path: ~/.dependency-check-data
-          key: dependency-check-data-${{ hashFiles('**/pom.xml', '**/package-lock.json', '**/requirements.txt') }}
-          restore-keys: dependency-check-data-
-
-      - name: Download Dependency-Check binary
-        run: |
-          mkdir -p $DC_DIR
-          echo "Downloading Dependency-Check v${DC_VERSION}..."
-          wget -q "https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" -O dc.zip
-          unzip -q dc.zip -d $HOME/
-          if [ -d "$HOME/dependency-check-${DC_VERSION}" ]; then
-            mv "$HOME/dependency-check-${DC_VERSION}" "$DC_DIR"
-          fi
-
-      - name: Verify binary
-        run: |
-          $DC_DIR/bin/dependency-check.sh --version
-
-      - name: Run fast Dependency-Check (no heavy NVD update)
-        run: |
+          DC_VERSION=10.0.3
+          wget https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip
+          unzip dependency-check-${DC_VERSION}-release.zip -d $HOME/dependency-check
+          mkdir -p $HOME/dependency-check/data
           mkdir -p reports
-          $DC_DIR/bin/dependency-check.sh \
-            --project "${{ github.repository }}" \
-            --scan . \
-            --out reports \
-            --format "HTML" \
-            --format "JSON" \
-            --data "$DATA_MIRROR" \
-            --noupdate \
-            --disableAssembly \
-            ${NVD_API_KEY:+"--nvdApiKey $NVD_API_KEY"} || true
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        timeout-minutes: 10
 
-      - name: Summarize vulnerabilities
+      - name: Run Dependency-Check (fast mode)
         run: |
-          if [ -f reports/dependency-check-report.json ]; then
-            echo "### Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
-            jq -r '.dependencies[]?.vulnerabilities[]?.severity' reports/dependency-check-report.json \
-              | sort | uniq -c | awk '{print "- **"$2"**: "$1}' >> $GITHUB_STEP_SUMMARY
-            total=$(jq '[.dependencies[]?.vulnerabilities[]?] | length' reports/dependency-check-report.json)
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Total vulnerabilities found: **$total**" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "No report found"
-          fi
+          $HOME/dependency-check/bin/dependency-check.sh \
+            --project "FastScan" \
+            --scan . \
+            --format "HTML,JSON" \
+            --out ./reports \
+            --disableAssembly \
+            --noupdate
 
       - name: Upload ODC Reports
         uses: actions/upload-artifact@v4
         with:
           name: ODC-Reports
           path: reports/
-
-      # Optional: Publish HTML report to GitHub Pages
-      # - name: Deploy Report to GitHub Pages
-      #   uses: peaceiris/actions-gh-pages@v3
-      #   with:
-      #     github_token: ${{ secrets.GITHUB_TOKEN }}
-      #     publish_branch: gh-pages
-      #     publish_dir: reports
-      #     force_orphan: true
