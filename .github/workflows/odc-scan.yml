@@ -1,48 +1,57 @@
-name: OWASP Dependency-Check (fast)
+name: OWASP Dependency-Check (Fast Scan)
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
-  odc-fast-scan:
+  dependency-check:
     runs-on: ubuntu-latest
+    env:
+      DC_VERSION: 10.0.3
+      DC_DIR: ${{ runner.temp }}/dependency-check
+      DATA_MIRROR: https://jeremylong.github.io/DependencyCheckData
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Download Dependency-Check
+      - name: Install Dependency-Check (Fast)
         run: |
-          DC_VERSION=10.0.3
-          wget https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip
-          unzip dependency-check-${DC_VERSION}-release.zip -d $HOME/dependency-check
-          mkdir -p $HOME/dependency-check/data
+          mkdir -p $DC_DIR
+          echo "Downloading Dependency-Check v${DC_VERSION}..."
+          wget -q "https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" -O dc.zip
+          unzip -q dc.zip -d $DC_DIR
+          mv $DC_DIR/dependency-check-${DC_VERSION}/* $DC_DIR/
+
+      - name: Verify installation
+        run: $DC_DIR/bin/dependency-check.sh --version
+
+      - name: Run Dependency-Check Scan
+        run: |
           mkdir -p reports
-
-      - name: Run Dependency-Check (fast mode)
-        run: |
-          $HOME/dependency-check/bin/dependency-check.sh \
-            --project "FastScan" \
+          $DC_DIR/bin/dependency-check.sh \
             --scan . \
-            --format "HTML,JSON" \
-            --out ./reports \
-            --disableAssembly \
-            --noupdate
+            --format "HTML" \
+            --out reports/dependency-check-report.html \
+            --data $DC_DIR/data \
+            --disableAutoupdate false \
+            --cveUrlBase "${DATA_MIRROR}/nvdcve-1.1-" \
+            --cveUrlModified "${DATA_MIRROR}/nvdcve-1.1-modified.json.gz" \
+            --disableAssembly
 
-      - name: Debug check report files
-        run: |
-          echo "Listing reports directory:"
-          ls -R reports || echo "No reports folder found"
-          echo "Listing dependency-check dir:"
-          ls -R $DC_DIR || echo "No dependency-check folder found"
+      - name: List Reports for Debug
+        run: ls -R reports || echo "No report found"
 
-      - name: Upload ODC Reports
+      - name: Upload HTML Report
         uses: actions/upload-artifact@v4
         with:
-          name: ODC-Reports
-          path: reports/
+          name: ODC-HTML-Report
+          path: reports/dependency-check-report.html
