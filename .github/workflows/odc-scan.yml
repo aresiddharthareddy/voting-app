@@ -1,6 +1,7 @@
-name: OWASP Dependency-Check Scan
+name: ODC Dependency Check
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
   pull_request:
@@ -16,37 +17,35 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          distribution: temurin
+          java-version: 17
 
-      - name: Download and Extract OWASP Dependency-Check
+      - name: Download Dependency-Check
         run: |
           DC_VERSION="10.0.3"
           DC_DIR="$HOME/dependency-check"
-          mkdir -p "$DC_DIR"
-          echo "Downloading Dependency-Check v${DC_VERSION}..."
+          echo "Downloading Dependency-Check v$DC_VERSION..."
           wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip
-          unzip -q dependency-check-${DC_VERSION}-release.zip -d "$HOME"
-          mv "$HOME/dependency-check" "$DC_DIR"
-          echo "Dependency-Check installed in $DC_DIR"
+          unzip -q dependency-check-${DC_VERSION}-release.zip -d $HOME
+          mv $HOME/dependency-check-${DC_VERSION} $DC_DIR
+          ls -la $DC_DIR/bin
 
-      - name: Run Dependency-Check Scan
+      - name: Run Dependency-Check scan
         run: |
-          REPORT_DIR="ODC-Reports"
-          mkdir -p "$REPORT_DIR"
-          $HOME/dependency-check/bin/dependency-check.sh \
+          DC_DIR="$HOME/dependency-check"
+          mkdir -p ODC-Reports
+          $DC_DIR/bin/dependency-check.sh \
+            --project "GitHub Repo Scan" \
             --scan . \
             --format "ALL" \
-            --out "$REPORT_DIR" \
-            --project "GitHub Dependency Check"
-          echo "Scan completed. Reports generated in $REPORT_DIR"
+            --out ODC-Reports \
+            --disableAssembly \
+            --enableExperimental
+          echo "Scan complete. Reports generated in ODC-Reports directory."
 
-      - name: Zip the Reports
-        run: |
-          zip -r ODC-Reports.zip ODC-Reports
-
-      - name: Upload Scan Reports
+      - name: Upload ODC report artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ODC-Reports
-          path: ODC-Reports.zip
+          path: ODC-Reports
+          if-no-files-found: error
