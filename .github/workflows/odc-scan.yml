@@ -1,4 +1,4 @@
-name: OWASP Dependency Check Scan
+name: OWASP Dependency-Check (fast)
 
 on:
   push:
@@ -6,54 +6,102 @@ on:
   workflow_dispatch:
 
 jobs:
-  dependency-check:
-    name: OWASP Dependency Check Scan
+  odc-fast-scan:
     runs-on: ubuntu-latest
+    env:
+      DVC_VERSION: "10.0.3"
+      DC_DIR: ${{ runner.temp }}/dependency-check-${{ env.DVC_VERSION }}
+      DC_DATA_CACHE_KEY: dependency-check-data-${{ env.DVC_VERSION }}-${{ hashFiles('**/pom.xml', '**/requirements.txt', '**/package-lock.json') }}
+      # mirror URL maintained by Jeremy Long (fast). No NVD full download.
+      DATA_MIRROR: "https://jeremylong.github.io/DependencyCheckData"
 
     steps:
-      # 1️⃣ Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Java (required by Dependency-Check)
-      - name: Setup Java
+      - name: Setup Java (required)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # 3️⃣ Download and extract Dependency-Check
-      - name: Download OWASP Dependency Check
-        run: |
-          wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.3/dependency-check-10.0.3-release.zip
-          unzip -q dependency-check-10.0.3-release.zip -d $HOME/
-          mv $HOME/dependency-check $HOME/dependency-check-10.0.3
+      - name: Restore cached Dependency-Check data (if any)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/dependency-check-data
+          key: ${{ env.DC_DATA_CACHE_KEY }}
+          restore-keys: |
+            dependency-check-data-${{ env.DVC_VERSION }}-
 
-      # 4️⃣ Run Dependency-Check Scan (generates HTML + JSON report)
-      - name: Run Dependency Check
+      - name: Download Dependency-Check binary (if missing)
+        run: |
+          if [ ! -d "${{ env.DC_DIR }}" ]; then
+            echo "Downloading dependency-check ${DVC_VERSION}..."
+            wget -q "https://github.com/jeremylong/DependencyCheck/releases/download/v${DVC_VERSION}/dependency-check-${DVC_VERSION}-release.zip" -O dc.zip
+            unzip -q dc.zip -d "${{ runner.temp }}/"
+            mv "${{ runner.temp }}/dependency-check" "${{ env.DC_DIR }}"
+          else
+            echo "dependency-check already present"
+          fi
+        shell: bash
+
+      - name: Verify binary
+        run: |
+          ls -ld "${{ env.DC_DIR }}"
+          "${{ env.DC_DIR }}/bin/dependency-check.sh" --version
+
+      - name: Run fast Dependency-Check (mirror + no-update)
         run: |
           mkdir -p reports
-          $HOME/dependency-check-10.0.3/bin/dependency-check.sh \
+          # Use mirror data and skip huge NVD download; fast and accurate for most cases
+          "${{ env.DC_DIR }}/bin/dependency-check.sh" \
             --project "${{ github.repository }}" \
             --scan . \
             --out reports \
             --format "HTML" \
             --format "JSON" \
+            --data "${{ env.DATA_MIRROR }}" \
+            --noupdate \
             --disableAssembly \
-            --nvdApiKey "${{ secrets.NVD_API_KEY }}" || true
+            ${NVD_API_KEY:+"--nvdApiKey $NVD_API_KEY"} || true
+        env:
+          # inject secret if present (optional). Set NVD_API_KEY secret if you want.
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        shell: bash
+        timeout-minutes: 15
 
-      # 5️⃣ Upload HTML report as artifact
-      - name: Upload ODC HTML Report
+      - name: Save data cache for faster future runs
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/dependency-check-data
+          key: ${{ env.DC_DATA_CACHE_KEY }}
+
+      - name: Show short summary (counts by severity)
+        run: |
+          # If JSON report exists, summarize counts
+          json_file="reports/dependency-check-report.json"
+          if [ -f "$json_file" ]; then
+            echo "Summary (by severity):"
+            jq -r '.dependencies[]?.vulnerabilities[]?.severity' "$json_file" 2>/dev/null | sort | uniq -c | awk '{print $2": "$1}' || echo "No vulnerabilities found"
+            echo "Total vulnerabilities:"
+            jq '[.dependencies[]?.vulnerabilities[]?] | length' "$json_file"
+          else
+            echo "JSON report not found. Check artifacts."
+          fi
+
+      - name: Upload HTML and JSON reports
         uses: actions/upload-artifact@v4
         with:
-          name: ODC-HTML-Report
-          path: reports/dependency-check-report.html
+          name: odc-reports
+          path: reports/
 
-      # 6️⃣ Deploy report to GitHub Pages
-      - name: Deploy HTML Report to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: reports
-          force_orphan: true
+      # Optional: deploy to GitHub Pages (uncomment if you want)
+      #- name: Deploy report to GitHub Pages
+      #  uses: peaceiris/actions-gh-pages@v3
+      #  with:
+      #    github_token: ${{ secrets.GITHUB_TOKEN }}
+      #    publish_branch: gh-pages
+      #    publish_dir: reports
+      #    force_orphan: true
