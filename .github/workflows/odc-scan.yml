@@ -8,10 +8,6 @@ on:
 jobs:
   dependency-check:
     runs-on: ubuntu-latest
-    env:
-      DC_VERSION: 10.0.3
-      DC_DIR: ${{ runner.temp }}/dependency-check
-      DATA_MIRROR: https://jeremylong.github.io/DependencyCheckData
 
     steps:
       - name: Checkout code
@@ -23,13 +19,19 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Set Environment Variables
+        run: |
+          echo "DC_VERSION=10.0.3" >> $GITHUB_ENV
+          echo "DC_DIR=$HOME/dependency-check" >> $GITHUB_ENV
+          echo "DATA_MIRROR=https://jeremylong.github.io/DependencyCheckData" >> $GITHUB_ENV
+
       - name: Install Dependency-Check (Fast)
         run: |
           mkdir -p $DC_DIR
           echo "Downloading Dependency-Check v${DC_VERSION}..."
           wget -q "https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" -O dc.zip
-          unzip -q dc.zip -d $DC_DIR
-          mv $DC_DIR/dependency-check-${DC_VERSION}/* $DC_DIR/
+          unzip -q dc.zip -d $HOME/
+          mv "$HOME/dependency-check-${DC_VERSION}"/* "$DC_DIR"/
 
       - name: Verify installation
         run: $DC_DIR/bin/dependency-check.sh --version
@@ -43,8 +45,8 @@ jobs:
             --out reports/dependency-check-report.html \
             --data $DC_DIR/data \
             --disableAutoupdate false \
-            --cveUrlBase "${DATA_MIRROR}/nvdcve-1.1-" \
-            --cveUrlModified "${DATA_MIRROR}/nvdcve-1.1-modified.json.gz" \
+            --cveUrlBase "https://jeremylong.github.io/DependencyCheckData/nvdcve-1.1-" \
+            --cveUrlModified "https://jeremylong.github.io/DependencyCheckData/nvdcve-1.1-modified.json.gz" \
             --disableAssembly
 
       - name: List Reports for Debug
