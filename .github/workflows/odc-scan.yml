@@ -1,59 +1,52 @@
-name: OWASP Dependency-Check (Fast Scan)
+name: OWASP Dependency-Check Scan
 
 on:
   push:
+    branches: [ main ]
   pull_request:
-  workflow_dispatch:
 
 jobs:
   dependency-check:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Set up environment
+      - name: Download and Extract OWASP Dependency-Check
         run: |
-          echo "DC_VERSION=10.0.3" >> $GITHUB_ENV
-          echo "DC_DIR=$HOME/dependency-check" >> $GITHUB_ENV
-          echo "DATA_MIRROR=https://jeremylong.github.io/DependencyCheckData" >> $GITHUB_ENV
-
-      - name: Download and Install Dependency-Check
-        run: |
-          mkdir -p $DC_DIR
+          DC_VERSION="10.0.3"
+          DC_DIR="$HOME/dependency-check"
+          mkdir -p "$DC_DIR"
           echo "Downloading Dependency-Check v${DC_VERSION}..."
-          wget -q "https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" -O dc.zip
-          unzip -q dc.zip -d temp_dc
-          extracted_dir=$(find temp_dc -maxdepth 1 -type d -name "dependency-check-*")
-          mv "$extracted_dir"/* "$DC_DIR"/
-
-      - name: Verify installation
-        run: $DC_DIR/bin/dependency-check.sh --version
+          wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip
+          unzip -q dependency-check-${DC_VERSION}-release.zip -d "$HOME"
+          mv "$HOME/dependency-check" "$DC_DIR"
+          echo "Dependency-Check installed in $DC_DIR"
 
       - name: Run Dependency-Check Scan
         run: |
-          mkdir -p reports
-          $DC_DIR/bin/dependency-check.sh \
+          REPORT_DIR="ODC-Reports"
+          mkdir -p "$REPORT_DIR"
+          $HOME/dependency-check/bin/dependency-check.sh \
             --scan . \
-            --format HTML \
-            --out reports/dependency-check-report.html \
-            --disableAutoupdate false \
-            --cveUrlBase "https://jeremylong.github.io/DependencyCheckData/nvdcve-1.1-" \
-            --cveUrlModified "https://jeremylong.github.io/DependencyCheckData/nvdcve-1.1-modified.json.gz" \
-            --disableAssembly
+            --format "ALL" \
+            --out "$REPORT_DIR" \
+            --project "GitHub Dependency Check"
+          echo "Scan completed. Reports generated in $REPORT_DIR"
 
-      - name: List Reports
-        run: ls -R reports || echo "No report found"
+      - name: Zip the Reports
+        run: |
+          zip -r ODC-Reports.zip ODC-Reports
 
-      - name: Upload HTML Report
+      - name: Upload Scan Reports
         uses: actions/upload-artifact@v4
         with:
-          name: ODC-HTML-Report
-          path: reports/dependency-check-report.html
+          name: ODC-Reports
+          path: ODC-Reports.zip
