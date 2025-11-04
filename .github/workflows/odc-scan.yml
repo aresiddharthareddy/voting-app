@@ -20,7 +20,6 @@ jobs:
           java-version: 17
 
       - name: Define variables
-        id: vars
         run: |
           echo "DC_VERSION=10.0.3" >> $GITHUB_ENV
           echo "DC_DIR=$HOME/dependency-check" >> $GITHUB_ENV
@@ -29,19 +28,18 @@ jobs:
       - name: Restore cached Dependency-Check data (if any)
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.dependency-check-data
+          path: ~/.dependency-check-data
           key: dependency-check-data-${{ hashFiles('**/pom.xml', '**/package-lock.json', '**/requirements.txt') }}
-          restore-keys: |
-            dependency-check-data-
+          restore-keys: dependency-check-data-
 
       - name: Download Dependency-Check binary
         run: |
-          if [ ! -d "$DC_DIR" ]; then
-            echo "Downloading Dependency-Check..."
-            wget -q "https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" -O dc.zip
-            unzip -q dc.zip -d $HOME/
-            mv "$HOME/dependency-check" "$DC_DIR" || mv "$HOME/dependency-check-${DC_VERSION}" "$DC_DIR"
+          mkdir -p $DC_DIR
+          echo "Downloading Dependency-Check v${DC_VERSION}..."
+          wget -q "https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" -O dc.zip
+          unzip -q dc.zip -d $HOME/
+          if [ -d "$HOME/dependency-check-${DC_VERSION}" ]; then
+            mv "$HOME/dependency-check-${DC_VERSION}" "$DC_DIR"
           fi
 
       - name: Verify binary
@@ -65,15 +63,15 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         timeout-minutes: 10
 
-      - name: Summary (count vulnerabilities)
+      - name: Summarize vulnerabilities
         run: |
           if [ -f reports/dependency-check-report.json ]; then
             echo "### Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
             jq -r '.dependencies[]?.vulnerabilities[]?.severity' reports/dependency-check-report.json \
               | sort | uniq -c | awk '{print "- **"$2"**: "$1}' >> $GITHUB_STEP_SUMMARY
+            total=$(jq '[.dependencies[]?.vulnerabilities[]?] | length' reports/dependency-check-report.json)
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Total: $(jq '[.dependencies[]?.vulnerabilities[]?] | length' reports/dependency-check-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "Total vulnerabilities found: **$total**" >> $GITHUB_STEP_SUMMARY
           else
             echo "No report found"
           fi
@@ -84,7 +82,7 @@ jobs:
           name: ODC-Reports
           path: reports/
 
-      # Optional: Uncomment to publish to GitHub Pages
+      # Optional: Publish HTML report to GitHub Pages
       # - name: Deploy Report to GitHub Pages
       #   uses: peaceiris/actions-gh-pages@v3
       #   with:
