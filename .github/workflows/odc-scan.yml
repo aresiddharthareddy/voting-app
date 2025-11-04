@@ -19,19 +19,20 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set Environment Variables
+      - name: Set up environment
         run: |
           echo "DC_VERSION=10.0.3" >> $GITHUB_ENV
           echo "DC_DIR=$HOME/dependency-check" >> $GITHUB_ENV
           echo "DATA_MIRROR=https://jeremylong.github.io/DependencyCheckData" >> $GITHUB_ENV
 
-      - name: Install Dependency-Check (Fast)
+      - name: Download and Install Dependency-Check
         run: |
           mkdir -p $DC_DIR
           echo "Downloading Dependency-Check v${DC_VERSION}..."
           wget -q "https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" -O dc.zip
-          unzip -q dc.zip -d $HOME/
-          mv "$HOME/dependency-check-${DC_VERSION}"/* "$DC_DIR"/
+          unzip -q dc.zip
+          extracted_dir=$(find . -type d -name "dependency-check-*")
+          mv "$extracted_dir"/* "$DC_DIR"/
 
       - name: Verify installation
         run: $DC_DIR/bin/dependency-check.sh --version
@@ -41,9 +42,8 @@ jobs:
           mkdir -p reports
           $DC_DIR/bin/dependency-check.sh \
             --scan . \
-            --format "HTML" \
+            --format HTML \
             --out reports/dependency-check-report.html \
-            --data $DC_DIR/data \
             --disableAutoupdate false \
             --cveUrlBase "https://jeremylong.github.io/DependencyCheckData/nvdcve-1.1-" \
             --cveUrlModified "https://jeremylong.github.io/DependencyCheckData/nvdcve-1.1-modified.json.gz" \
